@@ -23,7 +23,7 @@ export const MemberManagement = ({ members, onAddMember, onRemoveMember }: Membe
       toast.error("Digite o nome do membro");
       return;
     }
-    onAddMember(newMemberName);
+    onAddMember(newMemberName.trim());
     setNewMemberName("");
   };
 

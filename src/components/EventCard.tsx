@@ -1,15 +1,17 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calendar, Users, CheckCircle2, XCircle, Edit } from "lucide-react";
 import { Event } from "@/pages/Index";
 
 interface EventCardProps {
   event: Event;
   stats: { total: number; present: number; absent: number };
   onClick: () => void;
+  onEdit?: (e: React.MouseEvent) => void;
 }
 
-export const EventCard = ({ event, stats, onClick }: EventCardProps) => {
+export const EventCard = ({ event, stats, onClick, onEdit }: EventCardProps) => {
   const attendanceRate = stats.total > 0 ? (stats.present / stats.total) * 100 : 0;
   const isPast = new Date(event.date) < new Date();
 
@@ -19,15 +21,27 @@ export const EventCard = ({ event, stats, onClick }: EventCardProps) => {
       onClick={onClick}
     >
       <div className="space-y-4">
-        <div className="flex items-start justify-between">
-          <h3 className="font-semibold text-lg text-foreground line-clamp-2">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold text-lg text-foreground line-clamp-2 flex-1">
             {event.title}
           </h3>
-          {isPast && (
-            <Badge variant="secondary" className="shrink-0 ml-2">
-              Passado
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onEdit}
+                className="h-8 w-8 p-0 shrink-0"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
+            {isPast && (
+              <Badge variant="secondary" className="shrink-0">
+                Passado
+              </Badge>
+            )}
+          </div>
         </div>
 
         {event.description && (

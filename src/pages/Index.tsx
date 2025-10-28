@@ -4,10 +4,14 @@ import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Calendar, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Calendar, Users, CheckCircle2 } from "lucide-react";
 import { EventCard } from "@/components/EventCard";
 import { EventDetails } from "@/components/EventDetails";
 import { MemberManagement } from "@/components/MemberManagement";
+import { EditEventDialog } from "@/components/EditEventDialog";
+import { useEvents } from "@/hooks/useEvents";
+import { useMembers } from "@/hooks/useMembers";
+import { useAttendance } from "@/hooks/useAttendance";
 import { toast } from "sonner";
 
 export interface Member {
@@ -19,31 +23,29 @@ export interface Event {
   id: string;
   title: string;
   date: string;
-  description: string;
+  description: string | null;
   attendance: { [memberId: string]: boolean };
 }
 
 const Index = () => {
-  const [events, setEvents] = useState<Event[]>([
-    {
-      id: "1",
-      title: "Reunião de Planejamento",
-      date: "2025-01-15",
-      description: "Definição do tema e orçamento da formatura",
-      attendance: {},
-    },
-  ]);
-
-  const [members, setMembers] = useState<Member[]>([
-    { id: "1", name: "Ana Silva" },
-    { id: "2", name: "Carlos Santos" },
-    { id: "3", name: "Maria Oliveira" },
-    { id: "4", name: "João Costa" },
-  ]);
-
+  const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent } = useEvents();
+  const { members, isLoading: membersLoading, createMember, deleteMember } = useMembers();
+  
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [newEvent, setNewEvent] = useState({ title: "", date: "", description: "" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  const { attendance, toggleAttendance } = useAttendance(selectedEvent?.id || "");
+
+  // Convert DB events to local format with attendance
+  const events = dbEvents.map(event => ({
+    ...event,
+    attendance: attendance
+      .filter(a => a.event_id === event.id)
+      .reduce((acc, a) => ({ ...acc, [a.member_id]: a.is_present }), {} as { [key: string]: boolean })
+  }));
 
   const handleCreateEvent = () => {
     if (!newEvent.title || !newEvent.date) {
@@ -51,46 +53,29 @@ const Index = () => {
       return;
     }
 
-    const event: Event = {
-      id: Date.now().toString(),
-      ...newEvent,
-      attendance: {},
-    };
-
-    setEvents([...events, event]);
+    createEvent.mutate(newEvent);
     setNewEvent({ title: "", date: "", description: "" });
     setIsDialogOpen(false);
-    toast.success("Evento criado com sucesso!");
   };
 
   const handleToggleAttendance = (eventId: string, memberId: string) => {
-    setEvents(events.map(event => {
-      if (event.id === eventId) {
-        const newAttendance = { ...event.attendance };
-        newAttendance[memberId] = !newAttendance[memberId];
-        return { ...event, attendance: newAttendance };
-      }
-      return event;
-    }));
+    const currentAttendance = attendance.find(a => a.member_id === memberId);
+    toggleAttendance.mutate({
+      memberId,
+      isPresent: !currentAttendance?.is_present,
+    });
   };
 
   const handleAddMember = (name: string) => {
-    const newMember: Member = {
-      id: Date.now().toString(),
-      name,
-    };
-    setMembers([...members, newMember]);
-    toast.success("Membro adicionado com sucesso!");
+    createMember.mutate(name);
   };
 
   const handleRemoveMember = (memberId: string) => {
-    setMembers(members.filter(m => m.id !== memberId));
-    setEvents(events.map(event => {
-      const newAttendance = { ...event.attendance };
-      delete newAttendance[memberId];
-      return { ...event, attendance: newAttendance };
-    }));
-    toast.success("Membro removido com sucesso!");
+    deleteMember.mutate(memberId);
+  };
+
+  const handleUpdateEvent = (updates: Partial<Event> & { id: string }) => {
+    updateEvent.mutate(updates);
   };
 
   const getAttendanceStats = (event: Event) => {
@@ -98,6 +83,14 @@ const Index = () => {
     const present = Object.values(event.attendance).filter(Boolean).length;
     return { total, present, absent: total - present };
   };
+
+  if (eventsLoading || membersLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <p className="text-lg text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
@@ -250,6 +243,11 @@ const Index = () => {
                       event={event}
                       stats={getAttendanceStats(event)}
                       onClick={() => setSelectedEvent(event)}
+                      onEdit={(e) => {
+                        e.stopPropagation();
+                        setEditingEvent(event);
+                        setIsEditDialogOpen(true);
+                      }}
                     />
                   ))}
                 </div>
@@ -258,6 +256,13 @@ const Index = () => {
           </>
         )}
       </div>
+
+      <EditEventDialog
+        event={editingEvent}
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        onUpdate={handleUpdateEvent}
+      />
     </div>
   );
 };
