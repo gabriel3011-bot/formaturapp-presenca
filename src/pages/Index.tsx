@@ -176,13 +176,13 @@ const Index = () => {
               </DialogHeader>
               <div className="space-y-4 mt-4">
                 <div>
-                  <Label htmlFor="title">Título *</nLabel>
+                  <Label htmlFor="title">Título *</Label>
                   <Input
                     id="title"
                     value={newEvent.title}
                     onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
                     placeholder="Ex: Reunião de Planejamento"
-                  />
+                />
                 </div>
                 <div>
                   <Label htmlFor="date">Data *</Label>
