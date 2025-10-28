@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Event } from "@/hooks/useEvents";
 import { toast } from "sonner";
+import { eventSchema } from "@/lib/validations";
 
 interface EditEventDialogProps {
   event: Event | null;
@@ -23,16 +24,24 @@ export const EditEventDialog = ({ event, open, onOpenChange, onUpdate }: EditEve
   const handleUpdate = () => {
     if (!event) return;
     
-    if (!formData.title || !formData.date) {
-      toast.error("Preencha todos os campos obrigatórios");
+    // Validate input
+    const validation = eventSchema.safeParse({
+      title: formData.title,
+      date: formData.date,
+      description: formData.description || null,
+    });
+
+    if (!validation.success) {
+      const errors = validation.error.errors.map(e => e.message).join(", ");
+      toast.error(errors);
       return;
     }
 
     onUpdate({
       id: event.id,
-      title: formData.title,
-      date: formData.date,
-      description: formData.description,
+      title: validation.data.title,
+      date: validation.data.date,
+      description: validation.data.description || null,
     });
     
     onOpenChange(false);

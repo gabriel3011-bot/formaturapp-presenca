@@ -1,5 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Session } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,6 +17,7 @@ import { useEvents } from "@/hooks/useEvents";
 import { useMembers } from "@/hooks/useMembers";
 import { useAttendance } from "@/hooks/useAttendance";
 import { toast } from "sonner";
+import { eventSchema, memberSchema } from "@/lib/validations";
 
 export interface Member {
   id: string;
@@ -28,6 +33,10 @@ export interface Event {
 }
 
 const Index = () => {
+  const navigate = useNavigate();
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
   const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent } = useEvents();
   const { members, isLoading: membersLoading, createMember, deleteMember } = useMembers();
 
@@ -36,6 +45,33 @@ const Index = () => {
   const [newEvent, setNewEvent] = useState({ title: "", date: "", description: "" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  // Authentication check
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
 
   // Load attendance for the currently selected event; when null, hook gets empty id
   const { attendance, toggleAttendance } = useAttendance(selectedEvent?.id || "");
@@ -64,15 +100,23 @@ const Index = () => {
   }, [events, members]);
 
   const handleCreateEvent = () => {
-    if (!newEvent.title || !newEvent.date) {
-      toast.error("Preencha todos os campos obrigatórios");
+    // Validate input
+    const validation = eventSchema.safeParse({
+      title: newEvent.title,
+      date: newEvent.date,
+      description: newEvent.description || null,
+    });
+
+    if (!validation.success) {
+      const errors = validation.error.errors.map(e => e.message).join(", ");
+      toast.error(errors);
       return;
     }
-    // Allow creating past events: no restriction on date
+
     createEvent.mutate({
-      title: newEvent.title,
-      date: newEvent.date, // should be YYYY-MM-DD from input type=date
-      description: newEvent.description || null,
+      title: validation.data.title,
+      date: validation.data.date,
+      description: validation.data.description || null,
     });
     setNewEvent({ title: "", date: "", description: "" });
     setIsDialogOpen(false);
@@ -85,7 +129,16 @@ const Index = () => {
   };
 
   const handleAddMember = (name: string) => {
-    createMember.mutate(name);
+    // Validate member name
+    const validation = memberSchema.safeParse({ name });
+    
+    if (!validation.success) {
+      const errors = validation.error.errors.map(e => e.message).join(", ");
+      toast.error(errors);
+      return;
+    }
+
+    createMember.mutate(validation.data.name);
   };
 
   const handleRemoveMember = (memberId: string) => {
@@ -103,7 +156,7 @@ const Index = () => {
     return { total, present, absent: total - present };
   };
 
-  if (eventsLoading || membersLoading) {
+  if (authLoading || eventsLoading || membersLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center">
         <p className="text-lg text-muted-foreground">Carregando...</p>
@@ -111,11 +164,21 @@ const Index = () => {
     );
   }
 
+  if (!session) {
+    return null; // Will redirect to auth
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Header */}
         <header className="mb-12 text-center">
+          <div className="flex justify-end mb-4">
+            <Button variant="outline" onClick={handleSignOut} size="sm">
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </Button>
+          </div>
           <div className="inline-block mb-4">
             <div className="w-16 h-16 mx-auto bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center shadow-lg">
               <Calendar className="w-8 h-8 text-primary-foreground" />
