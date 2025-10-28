@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Calendar, Users, CheckCircle2 } from "lucide-react";
 import { EventCard } from "@/components/EventCard";
-import { EventDetails } from "@/components/EventDetails";
 import { MemberManagement } from "@/components/MemberManagement";
 import { EditEventDialog } from "@/components/EditEventDialog";
+import { DateSelector } from "@/components/DateSelector";
+import { AttendanceMarker } from "@/components/AttendanceMarker";
 import { useEvents } from "@/hooks/useEvents";
 import { useMembers } from "@/hooks/useMembers";
 import { useAttendance } from "@/hooks/useAttendance";
@@ -40,6 +42,7 @@ const Index = () => {
   const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent } = useEvents();
   const { members, isLoading: membersLoading, createMember, deleteMember } = useMembers();
 
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [newEvent, setNewEvent] = useState({ title: "", date: "", description: "" });
@@ -73,10 +76,17 @@ const Index = () => {
     navigate("/auth");
   };
 
-  // Load attendance for the currently selected event; when null, hook gets empty id
-  const { attendance, toggleAttendance } = useAttendance(selectedEvent?.id || "");
+  // Find or create event for selected date
+  const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
+  
+  const eventForSelectedDate = useMemo(() => {
+    return dbEvents.find(e => e.date === selectedDateStr);
+  }, [dbEvents, selectedDateStr]);
 
-  // Merge DB events with attendance for live view (not required for create past events)
+  // Load attendance for the event on the selected date
+  const { attendance, toggleAttendance } = useAttendance(eventForSelectedDate?.id || "");
+
+  // Merge DB events with attendance for live view
   const events: Event[] = useMemo(() => {
     return dbEvents.map((event) => ({
       ...event,
@@ -122,10 +132,13 @@ const Index = () => {
     setIsDialogOpen(false);
   };
 
-  // Toggle presence for a specific member in the currently selected event
-  const handleToggleAttendance = (_eventId: string, memberId: string) => {
-    const current = attendance.find((a) => a.member_id === memberId);
-    toggleAttendance.mutate({ memberId, isPresent: !current?.is_present });
+  // Toggle presence with optional justification
+  const handleToggleAttendance = (memberId: string, isPresent: boolean, justification?: string) => {
+    if (!eventForSelectedDate) {
+      toast.error("Nenhum evento encontrado para esta data. Crie um evento primeiro.");
+      return;
+    }
+    toggleAttendance.mutate({ memberId, isPresent, justification });
   };
 
   const handleAddMember = (name: string) => {
@@ -247,52 +260,94 @@ const Index = () => {
         </div>
 
         {/* Content */}
-        {selectedEvent ? (
-          <div className="animate-in fade-in duration-300">
-            <Button variant="ghost" onClick={() => setSelectedEvent(null)} className="mb-4">
-              ← Voltar para eventos
-            </Button>
-            {/* Inline presence controls in EventDetails via onToggleAttendance */}
-            <EventDetails
-              event={selectedEvent}
-              members={members}
-              onToggleAttendance={handleToggleAttendance}
-            />
-            {/* Quick presence grid to mark directly on this page */}
-            <div className="mt-6">
-              <h3 className="font-semibold mb-2">Marcar presença rapidamente</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {members.map((m) => {
-                  const isPresent = selectedEvent.attendance?.[m.id] ?? false;
-                  return (
-                    <Card key={m.id} className="p-3 flex items-center justify-between">
-                      <span>{m.name}</span>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={isPresent ? "default" : "outline"}
-                          onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
-                        >
-                          {isPresent ? "Presente" : "Marcar Presente"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={!isPresent ? "destructive" : "outline"}
-                          onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
-                        >
-                          {!isPresent ? "Ausente" : "Marcar Ausente"}
-                        </Button>
-                      </div>
-                    </Card>
-                  );
-                })}
+        <div className="space-y-6">
+          {/* Date Selector and Attendance Marker */}
+          <Card className="p-6">
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-bold mb-4">Gerenciar Frequência por Data</h2>
+                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                  <DateSelector 
+                    selectedDate={selectedDate} 
+                    onDateChange={setSelectedDate}
+                  />
+                  {eventForSelectedDate && (
+                    <div className="text-sm text-muted-foreground">
+                      Evento: <span className="font-semibold text-foreground">{eventForSelectedDate.title}</span>
+                    </div>
+                  )}
+                  {!eventForSelectedDate && (
+                    <div className="text-sm text-muted-foreground">
+                      Nenhum evento nesta data. Crie um evento para marcar presença.
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {eventForSelectedDate && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg">Marcar Presença</h3>
+                  <div className="space-y-2">
+                    {members.map((member) => {
+                      const attendanceRecord = attendance.find(a => a.member_id === member.id);
+                      const isPresent = attendanceRecord?.is_present ?? null;
+                      const justification = attendanceRecord?.justification;
+
+                      return (
+                        <Card key={member.id} className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <span className="font-medium">{member.name}</span>
+                            <AttendanceMarker
+                              memberId={member.id}
+                              memberName={member.name}
+                              isPresent={isPresent}
+                              justification={justification}
+                              onToggle={(isPresent, justification) => 
+                                handleToggleAttendance(member.id, isPresent, justification)
+                              }
+                            />
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ) : (
-          <>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          </Card>
+
+          {/* View Event List */}
+          {selectedEvent ? (
+            <div className="animate-in fade-in duration-300">
+              <Button variant="ghost" onClick={() => setSelectedEvent(null)} className="mb-4">
+                ← Voltar para lista de eventos
+              </Button>
+              <Card className="p-6">
+                <h2 className="text-2xl font-bold mb-4">{selectedEvent.title}</h2>
+                <p className="text-muted-foreground mb-2">Data: {format(new Date(selectedEvent.date), "dd/MM/yyyy")}</p>
+                {selectedEvent.description && (
+                  <p className="text-sm text-muted-foreground mb-4">{selectedEvent.description}</p>
+                )}
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Presenças:</h3>
+                  {members.map(member => {
+                    const isPresent = selectedEvent.attendance?.[member.id];
+                    return (
+                      <div key={member.id} className="flex items-center gap-2">
+                        <span>{member.name}:</span>
+                        <span className={isPresent ? "text-green-600" : "text-red-600"}>
+                          {isPresent ? "Presente" : "Ausente"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </div>
+          ) : (
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50 shadow-md">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -330,48 +385,37 @@ const Index = () => {
               </Card>
             </div>
 
-            {/* Absence counter list by member */}
-            <div className="mb-8">
-              <h2 className="text-xl font-semibold mb-3">Contador de faltas</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {members.map((m) => (
-                  <Card key={m.id} className="p-4 flex items-center justify-between">
-                    <span>{m.name}</span>
-                    <span className="text-sm text-muted-foreground">{absencesByMember[m.id]} falta(s)</span>
-                  </Card>
-                ))}
-              </div>
-            </div>
 
-            {/* Events List (shows both past and upcoming) */}
-            <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-foreground mb-4">Eventos</h2>
-              {events.length === 0 ? (
-                <Card className="p-12 text-center border-dashed">
-                  <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Nenhum evento criado ainda</p>
-                  <p className="text-sm text-muted-foreground mt-2">Clique em "Novo Evento" para começar</p>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {events.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      stats={getAttendanceStats(event)}
-                      onClick={() => setSelectedEvent(event)}
-                      onEdit={(e) => {
-                        e.stopPropagation();
-                        setEditingEvent(event);
-                        setIsEditDialogOpen(true);
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
+              {/* Events List (shows both past and upcoming) */}
+              <div className="space-y-4">
+                <h2 className="text-2xl font-bold text-foreground mb-4">Eventos</h2>
+                {events.length === 0 ? (
+                  <Card className="p-12 text-center border-dashed">
+                    <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">Nenhum evento criado ainda</p>
+                    <p className="text-sm text-muted-foreground mt-2">Clique em "Novo Evento" para começar</p>
+                  </Card>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {events.map((event) => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        stats={getAttendanceStats(event)}
+                        onClick={() => setSelectedEvent(event)}
+                        onEdit={(e) => {
+                          e.stopPropagation();
+                          setEditingEvent(event);
+                          setIsEditDialogOpen(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       <EditEventDialog

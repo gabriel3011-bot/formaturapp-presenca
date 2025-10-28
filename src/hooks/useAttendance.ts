@@ -6,6 +6,7 @@ export interface Attendance {
   event_id: string;
   member_id: string;
   is_present: boolean;
+  justification?: string;
 }
 
 export const useAttendance = (eventId: string) => {
@@ -29,16 +30,21 @@ export const useAttendance = (eventId: string) => {
     mutationFn: async ({
       memberId,
       isPresent,
+      justification,
     }: {
       memberId: string;
       isPresent: boolean;
+      justification?: string;
     }) => {
       const existing = attendance.find((a) => a.member_id === memberId);
 
       if (existing) {
         const { error } = await supabase
           .from("attendance")
-          .update({ is_present: isPresent })
+          .update({ 
+            is_present: isPresent,
+            justification: justification || null
+          })
           .eq("id", existing.id);
         if (error) throw error;
       } else {
@@ -47,6 +53,7 @@ export const useAttendance = (eventId: string) => {
             event_id: eventId,
             member_id: memberId,
             is_present: isPresent,
+            justification: justification || null,
           },
         ]);
         if (error) throw error;

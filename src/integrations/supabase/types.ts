@@ -20,6 +20,7 @@ export type Database = {
           event_id: string
           id: string
           is_present: boolean
+          justification: string | null
           member_id: string
         }
         Insert: {
@@ -27,6 +28,7 @@ export type Database = {
           event_id: string
           id?: string
           is_present?: boolean
+          justification?: string | null
           member_id: string
         }
         Update: {
@@ -34,6 +36,7 @@ export type Database = {
           event_id?: string
           id?: string
           is_present?: boolean
+          justification?: string | null
           member_id?: string
         }
         Relationships: [
