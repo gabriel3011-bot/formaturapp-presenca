@@ -27,6 +27,8 @@ export interface Event {
   attendance: { [memberId: string]: boolean };
 }
 
+// Local justification map indexed by memberId for the currently selected event
+// When a member is absent and a non-empty justification is provided, the absence is ignored in counters
 const Index = () => {
   const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent } = useEvents();
   const { members, isLoading: membersLoading, createMember, deleteMember } = useMembers();
@@ -36,6 +38,9 @@ const Index = () => {
   const [newEvent, setNewEvent] = useState({ title: "", date: "", description: "" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  // Justifications for absences on the currently selected event (memberId -> text)
+  const [absenceJustifications, setAbsenceJustifications] = useState<Record<string, string>>({});
 
   // Load attendance for the currently selected event; when null, hook gets empty id
   const { attendance, toggleAttendance } = useAttendance(selectedEvent?.id || "");
@@ -50,18 +55,27 @@ const Index = () => {
     }));
   }, [dbEvents, attendance]);
 
-  // Compute absences per member across all events
+  // Compute absences per member across all events, excluding justified absences for the selected event
   const absencesByMember = useMemo(() => {
     const counter: Record<string, number> = {};
     for (const m of members) counter[m.id] = 0;
+
     for (const ev of events) {
       for (const m of members) {
         const present = ev.attendance?.[m.id];
-        if (present === false || present === undefined) counter[m.id] += 1;
+        const isSelectedEvent = selectedEvent && ev.id === selectedEvent.id;
+        const hasJustification = !!absenceJustifications[m.id]?.trim();
+
+        // Count absence if:
+        // - not present (false or undefined)
+        // - and either not the selected event, or it is the selected event but without justification
+        if ((present === false || present === undefined) && (!isSelectedEvent || !hasJustification)) {
+          counter[m.id] += 1;
+        }
       }
     }
     return counter;
-  }, [events, members]);
+  }, [events, members, selectedEvent, absenceJustifications]);
 
   const handleCreateEvent = () => {
     if (!newEvent.title || !newEvent.date) {
@@ -78,10 +92,30 @@ const Index = () => {
     setIsDialogOpen(false);
   };
 
+  // When switching selectedEvent, clear justifications map so it refers to the new event
+  const handleSelectEvent = (ev: Event | null) => {
+    setSelectedEvent(ev);
+    setAbsenceJustifications({});
+  };
+
   // Toggle presence for a specific member in the currently selected event
   const handleToggleAttendance = (_eventId: string, memberId: string) => {
     const current = attendance.find((a) => a.member_id === memberId);
     toggleAttendance.mutate({ memberId, isPresent: !current?.is_present });
+
+    // If toggled to present, clear any justification for that member
+    const willBePresent = !(current?.is_present ?? false);
+    if (willBePresent) {
+      setAbsenceJustifications((prev) => {
+        if (!prev[memberId]) return prev;
+        const { [memberId]: _, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
+
+  const handleJustificationChange = (memberId: string, text: string) => {
+    setAbsenceJustifications((prev) => ({ ...prev, [memberId]: text }));
   };
 
   const handleAddMember = (name: string) => {
@@ -148,7 +182,7 @@ const Index = () => {
                     value={newEvent.title}
                     onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
                     placeholder="Ex: Reunião de Planejamento"
-                  />
+                />
                 </div>
                 <div>
                   <Label htmlFor="date">Data *</Label>
@@ -185,40 +219,56 @@ const Index = () => {
         {/* Content */}
         {selectedEvent ? (
           <div className="animate-in fade-in duration-300">
-            <Button variant="ghost" onClick={() => setSelectedEvent(null)} className="mb-4">
+            <Button variant="ghost" onClick={() => handleSelectEvent(null)} className="mb-4">
               ← Voltar para eventos
             </Button>
+
             {/* Inline presence controls in EventDetails via onToggleAttendance */}
             <EventDetails
               event={selectedEvent}
               members={members}
               onToggleAttendance={handleToggleAttendance}
             />
+
             {/* Quick presence grid to mark directly on this page */}
             <div className="mt-6">
               <h3 className="font-semibold mb-2">Marcar presença rapidamente</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {members.map((m) => {
                   const isPresent = selectedEvent.attendance?.[m.id] ?? false;
+                  const justification = absenceJustifications[m.id] || "";
                   return (
-                    <Card key={m.id} className="p-3 flex items-center justify-between">
-                      <span>{m.name}</span>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={isPresent ? "default" : "outline"}
-                          onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
-                        >
-                          {isPresent ? "Presente" : "Marcar Presente"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={!isPresent ? "destructive" : "outline"}
-                          onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
-                        >
-                          {!isPresent ? "Ausente" : "Marcar Ausente"}
-                        </Button>
+                    <Card key={m.id} className="p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{m.name}</span>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant={isPresent ? "default" : "outline"}
+                            onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
+                          >
+                            {isPresent ? "Presente" : "Marcar Presente"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={!isPresent ? "destructive" : "outline"}
+                            onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
+                          >
+                            {!isPresent ? "Ausente" : "Marcar Ausente"}
+                          </Button>
+                        </div>
                       </div>
+                      {!isPresent && (
+                        <div className="mt-3">
+                          <Label htmlFor={`just-${m.id}`}>Justificativa (opcional)</Label>
+                          <Input
+                            id={`just-${m.id}`}
+                            placeholder="Informe a justificativa da ausência"
+                            value={justification}
+                            onChange={(e) => handleJustificationChange(m.id, e.target.value)}
+                          />
+                        </div>
+                      )}
                     </Card>
                   );
                 })}
@@ -295,7 +345,7 @@ const Index = () => {
                       key={event.id}
                       event={event}
                       stats={getAttendanceStats(event)}
-                      onClick={() => setSelectedEvent(event)}
+                      onClick={() => handleSelectEvent(event)}
                       onEdit={(e) => {
                         e.stopPropagation();
                         setEditingEvent(event);
@@ -313,7 +363,7 @@ const Index = () => {
       <EditEventDialog
         event={editingEvent}
         open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen} 
         onUpdate={handleUpdateEvent}
       />
     </div>
