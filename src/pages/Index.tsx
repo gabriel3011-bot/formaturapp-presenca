@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -22,7 +22,7 @@ export interface Member {
 export interface Event {
   id: string;
   title: string;
-  date: string;
+  date: string; // ISO (YYYY-MM-DD)
   description: string | null;
   attendance: { [memberId: string]: boolean };
 }
@@ -30,40 +30,58 @@ export interface Event {
 const Index = () => {
   const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent } = useEvents();
   const { members, isLoading: membersLoading, createMember, deleteMember } = useMembers();
-  
+
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [newEvent, setNewEvent] = useState({ title: "", date: "", description: "" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
+  // Load attendance for the currently selected event; when null, hook gets empty id
   const { attendance, toggleAttendance } = useAttendance(selectedEvent?.id || "");
 
-  // Convert DB events to local format with attendance
-  const events = dbEvents.map(event => ({
-    ...event,
-    attendance: attendance
-      .filter(a => a.event_id === event.id)
-      .reduce((acc, a) => ({ ...acc, [a.member_id]: a.is_present }), {} as { [key: string]: boolean })
-  }));
+  // Merge DB events with attendance for live view (not required for create past events)
+  const events: Event[] = useMemo(() => {
+    return dbEvents.map((event) => ({
+      ...event,
+      attendance: attendance
+        .filter((a) => a.event_id === event.id)
+        .reduce((acc, a) => ({ ...acc, [a.member_id]: a.is_present }), {} as { [key: string]: boolean }),
+    }));
+  }, [dbEvents, attendance]);
+
+  // Compute absences per member across all events
+  const absencesByMember = useMemo(() => {
+    const counter: Record<string, number> = {};
+    for (const m of members) counter[m.id] = 0;
+    for (const ev of events) {
+      for (const m of members) {
+        const present = ev.attendance?.[m.id];
+        if (present === false || present === undefined) counter[m.id] += 1;
+      }
+    }
+    return counter;
+  }, [events, members]);
 
   const handleCreateEvent = () => {
     if (!newEvent.title || !newEvent.date) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
-
-    createEvent.mutate(newEvent);
+    // Allow creating past events: no restriction on date
+    createEvent.mutate({
+      title: newEvent.title,
+      date: newEvent.date, // should be YYYY-MM-DD from input type=date
+      description: newEvent.description || null,
+    });
     setNewEvent({ title: "", date: "", description: "" });
     setIsDialogOpen(false);
   };
 
-  const handleToggleAttendance = (eventId: string, memberId: string) => {
-    const currentAttendance = attendance.find(a => a.member_id === memberId);
-    toggleAttendance.mutate({
-      memberId,
-      isPresent: !currentAttendance?.is_present,
-    });
+  // Toggle presence for a specific member in the currently selected event
+  const handleToggleAttendance = (_eventId: string, memberId: string) => {
+    const current = attendance.find((a) => a.member_id === memberId);
+    toggleAttendance.mutate({ memberId, isPresent: !current?.is_present });
   };
 
   const handleAddMember = (name: string) => {
@@ -75,12 +93,13 @@ const Index = () => {
   };
 
   const handleUpdateEvent = (updates: Partial<Event> & { id: string }) => {
+    // Permit updating event date to past without blocking
     updateEvent.mutate(updates);
   };
 
   const getAttendanceStats = (event: Event) => {
     const total = members.length;
-    const present = Object.values(event.attendance).filter(Boolean).length;
+    const present = Object.values(event.attendance || {}).filter(Boolean).length;
     return { total, present, absent: total - present };
   };
 
@@ -105,9 +124,7 @@ const Index = () => {
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-3">
             Controle de Presença
           </h1>
-          <p className="text-muted-foreground text-lg">
-            Gestão de eventos da comissão de formatura
-          </p>
+          <p className="text-muted-foreground text-lg">Gestão de eventos da comissão de formatura</p>
         </header>
 
         {/* Actions Bar */}
@@ -151,7 +168,7 @@ const Index = () => {
                     placeholder="Detalhes do evento..."
                   />
                 </div>
-                <Button onClick={handleCreateEvent} className="w-full bg-gradient-to-r from-primary to-secondary">
+                <Button className="w-full bg-gradient-to-r from-primary to-secondary" onClick={handleCreateEvent}>
                   Criar Evento
                 </Button>
               </div>
@@ -168,18 +185,45 @@ const Index = () => {
         {/* Content */}
         {selectedEvent ? (
           <div className="animate-in fade-in duration-300">
-            <Button
-              variant="ghost"
-              onClick={() => setSelectedEvent(null)}
-              className="mb-4"
-            >
+            <Button variant="ghost" onClick={() => setSelectedEvent(null)} className="mb-4">
               ← Voltar para eventos
             </Button>
+            {/* Inline presence controls in EventDetails via onToggleAttendance */}
             <EventDetails
               event={selectedEvent}
               members={members}
               onToggleAttendance={handleToggleAttendance}
             />
+            {/* Quick presence grid to mark directly on this page */}
+            <div className="mt-6">
+              <h3 className="font-semibold mb-2">Marcar presença rapidamente</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {members.map((m) => {
+                  const isPresent = selectedEvent.attendance?.[m.id] ?? false;
+                  return (
+                    <Card key={m.id} className="p-3 flex items-center justify-between">
+                      <span>{m.name}</span>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={isPresent ? "default" : "outline"}
+                          onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
+                        >
+                          {isPresent ? "Presente" : "Marcar Presente"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={!isPresent ? "destructive" : "outline"}
+                          onClick={() => handleToggleAttendance(selectedEvent.id, m.id)}
+                        >
+                          {!isPresent ? "Ausente" : "Marcar Ausente"}
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         ) : (
           <>
@@ -196,7 +240,6 @@ const Index = () => {
                   </div>
                 </div>
               </Card>
-
               <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50 shadow-md">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center">
@@ -208,7 +251,6 @@ const Index = () => {
                   </div>
                 </div>
               </Card>
-
               <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50 shadow-md">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center">
@@ -217,23 +259,34 @@ const Index = () => {
                   <div>
                     <p className="text-sm text-muted-foreground">Próximos Eventos</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {events.filter(e => new Date(e.date) >= new Date()).length}
+                      {events.filter((e) => new Date(e.date) >= new Date()).length}
                     </p>
                   </div>
                 </div>
               </Card>
             </div>
 
-            {/* Events List */}
+            {/* Absence counter list by member */}
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold mb-3">Contador de faltas</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {members.map((m) => (
+                  <Card key={m.id} className="p-4 flex items-center justify-between">
+                    <span>{m.name}</span>
+                    <span className="text-sm text-muted-foreground">{absencesByMember[m.id]} falta(s)</span>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Events List (shows both past and upcoming) */}
             <div className="space-y-4">
               <h2 className="text-2xl font-bold text-foreground mb-4">Eventos</h2>
               {events.length === 0 ? (
                 <Card className="p-12 text-center border-dashed">
                   <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                   <p className="text-muted-foreground">Nenhum evento criado ainda</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Clique em "Novo Evento" para começar
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">Clique em "Novo Evento" para começar</p>
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
