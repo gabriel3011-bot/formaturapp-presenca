@@ -177,6 +177,7 @@ const Index = () => {
 
           <MemberManagement
             members={members}
+            attendances={attendance}
             onAddMember={handleAddMember}
             onRemoveMember={handleRemoveMember}
           />

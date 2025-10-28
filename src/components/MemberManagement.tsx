@@ -12,21 +12,20 @@ interface Attendance {
   id: string;
   member_id: string;
   event_id: string;
-  status: 'present' | 'absent';
-  created_at: string;
+  is_present: boolean;
 }
 
 interface MemberManagementProps {
   members: Member[];
-  attendances: Attendance[];
+  attendances?: Attendance[];
   onAddMember: (name: string) => void;
   onRemoveMember: (memberId: string) => void;
 }
 
 // Função para calcular o status de faltas
-const getAbsenceStatus = (memberId: string, attendances: Attendance[]) => {
+const getAbsenceStatus = (memberId: string, attendances: Attendance[] = []) => {
   const absences = attendances.filter(
-    (att) => att.member_id === memberId && att.status === 'absent'
+    (att) => att.member_id === memberId && !att.is_present
   ).length;
 
   if (absences > 3) {
@@ -37,7 +36,7 @@ const getAbsenceStatus = (memberId: string, attendances: Attendance[]) => {
   return { status: 'ok', color: '', bgColor: '', absences };
 };
 
-export const MemberManagement = ({ members, attendances, onAddMember, onRemoveMember }: MemberManagementProps) => {
+export const MemberManagement = ({ members, attendances = [], onAddMember, onRemoveMember }: MemberManagementProps) => {
   const [newMemberName, setNewMemberName] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
