@@ -363,7 +363,7 @@ const Index = () => {
       <EditEventDialog
         event={editingEvent}
         open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen} 
         onUpdate={handleUpdateEvent}
       />
     </div>
