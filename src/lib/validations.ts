@@ -29,5 +29,11 @@ export const memberSchema = z.object({
     ),
 });
 
+export const justificationSchema = z
+  .string()
+  .trim()
+  .max(1000, "A justificativa deve ter no máximo 1000 caracteres")
+  .optional();
+
 export type EventInput = z.infer<typeof eventSchema>;
 export type MemberInput = z.infer<typeof memberSchema>;

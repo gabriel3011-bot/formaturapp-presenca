@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAbsenceCount, getAbsenceStatus } from "@/hooks/useAbsenceCount";
+import { justificationSchema } from "@/lib/validations";
+import { toast } from "sonner";
 
 interface AttendanceMarkerProps {
   memberId: string;
@@ -34,6 +36,14 @@ export const AttendanceMarker = ({
   const absenceStatusInfo = getAbsenceStatus(absenceCount);
 
   const handleSaveJustification = () => {
+    // Validate justification before saving
+    const validation = justificationSchema.safeParse(localJustification);
+    
+    if (!validation.success) {
+      toast.error(validation.error.errors[0].message);
+      return;
+    }
+    
     onToggle(false, localJustification);
     setIsJustificationOpen(false);
   };
@@ -84,12 +94,18 @@ export const AttendanceMarker = ({
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <Textarea
-                placeholder="Ex: Atestado médico, motivos familiares..."
-                value={localJustification}
-                onChange={(e) => setLocalJustification(e.target.value)}
-                rows={4}
-              />
+              <div>
+                <Textarea
+                  placeholder="Ex: Atestado médico, motivos familiares..."
+                  value={localJustification}
+                  onChange={(e) => setLocalJustification(e.target.value)}
+                  rows={4}
+                  maxLength={1000}
+                />
+                <p className="text-sm text-muted-foreground text-right mt-1">
+                  {localJustification.length}/1000 caracteres
+                </p>
+              </div>
               <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
