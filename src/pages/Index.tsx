@@ -39,7 +39,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   
-  const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent } = useEvents();
+  const { events: dbEvents, isLoading: eventsLoading, createEvent, updateEvent, deleteEvent } = useEvents();
   const { members, isLoading: membersLoading, createMember, deleteMember } = useMembers();
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -159,8 +159,14 @@ const Index = () => {
   };
 
   const handleUpdateEvent = (updates: Partial<Event> & { id: string }) => {
-    // Permit updating event date to past without blocking
     updateEvent.mutate(updates);
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    deleteEvent.mutate(eventId);
+    if (selectedEvent?.id === eventId) {
+      setSelectedEvent(null);
+    }
   };
 
   const getAttendanceStats = (event: Event) => {
@@ -408,6 +414,7 @@ const Index = () => {
                           setEditingEvent(event);
                           setIsEditDialogOpen(true);
                         }}
+                        onDelete={handleDeleteEvent}
                       />
                     ))}
                   </div>

@@ -1,7 +1,18 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, Users, CheckCircle2, XCircle, Edit } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Calendar, Users, CheckCircle2, XCircle, Edit, Trash2 } from "lucide-react";
 import { Event } from "@/pages/Index";
 
 interface EventCardProps {
@@ -9,9 +20,10 @@ interface EventCardProps {
   stats: { total: number; present: number; absent: number };
   onClick: () => void;
   onEdit?: (e: React.MouseEvent) => void;
+  onDelete?: (id: string) => void;
 }
 
-export const EventCard = ({ event, stats, onClick, onEdit }: EventCardProps) => {
+export const EventCard = ({ event, stats, onClick, onEdit, onDelete }: EventCardProps) => {
   const attendanceRate = stats.total > 0 ? (stats.present / stats.total) * 100 : 0;
   const isPast = new Date(event.date) < new Date();
 
@@ -25,7 +37,7 @@ export const EventCard = ({ event, stats, onClick, onEdit }: EventCardProps) => 
           <h3 className="font-semibold text-lg text-foreground line-clamp-2 flex-1">
             {event.title}
           </h3>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {onEdit && (
               <Button
                 variant="ghost"
@@ -35,6 +47,40 @@ export const EventCard = ({ event, stats, onClick, onEdit }: EventCardProps) => 
               >
                 <Edit className="h-4 w-4" />
               </Button>
+            )}
+            {onDelete && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-8 w-8 p-0 shrink-0 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Tem certeza que deseja excluir o evento "{event.title}"? Esta ação não pode ser desfeita.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(event.id);
+                      }}
+                      className="bg-destructive hover:bg-destructive/90"
+                    >
+                      Excluir
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
             {isPast && (
               <Badge variant="secondary" className="shrink-0">
