@@ -8,13 +8,36 @@ import { Member } from "@/pages/Index";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 
+interface Attendance {
+  id: string;
+  member_id: string;
+  event_id: string;
+  status: 'present' | 'absent';
+  created_at: string;
+}
+
 interface MemberManagementProps {
   members: Member[];
+  attendances: Attendance[];
   onAddMember: (name: string) => void;
   onRemoveMember: (memberId: string) => void;
 }
 
-export const MemberManagement = ({ members, onAddMember, onRemoveMember }: MemberManagementProps) => {
+// Função para calcular o status de faltas
+const getAbsenceStatus = (memberId: string, attendances: Attendance[]) => {
+  const absences = attendances.filter(
+    (att) => att.member_id === memberId && att.status === 'absent'
+  ).length;
+
+  if (absences > 3) {
+    return { status: 'fora', color: 'text-red-600', bgColor: 'bg-red-100', absences };
+  } else if (absences === 3) {
+    return { status: 'atenção', color: 'text-orange-600', bgColor: 'bg-orange-100', absences };
+  }
+  return { status: 'ok', color: '', bgColor: '', absences };
+};
+
+export const MemberManagement = ({ members, attendances, onAddMember, onRemoveMember }: MemberManagementProps) => {
   const [newMemberName, setNewMemberName] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
@@ -39,7 +62,6 @@ export const MemberManagement = ({ members, onAddMember, onRemoveMember }: Membe
         <DialogHeader>
           <DialogTitle>Gerenciar Membros da Comissão</DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 mt-4">
           {/* Add Member */}
           <div className="flex gap-2">
@@ -58,31 +80,33 @@ export const MemberManagement = ({ members, onAddMember, onRemoveMember }: Membe
               Adicionar
             </Button>
           </div>
-
           {/* Members List */}
           <div className="space-y-2">
-            {members.length === 0 ? (
-              <Card className="p-8 text-center border-dashed">
-                <Users className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">Nenhum membro cadastrado</p>
-              </Card>
-            ) : (
-              members.map((member) => (
-                <Card key={member.id} className="p-3 bg-gradient-to-br from-card to-card/50 border-border/50">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-foreground">{member.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onRemoveMember(member.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+            {members.map((member) => {
+              const absenceInfo = getAbsenceStatus(member.id, attendances);
+              return (
+                <Card key={member.id} className={`p-3 flex items-center justify-between ${absenceInfo.bgColor}`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`font-medium ${absenceInfo.color}`}>
+                      {member.name}
+                    </span>
+                    {absenceInfo.status !== 'ok' && (
+                      <span className={`text-sm ${absenceInfo.color} font-semibold`}>
+                        ({absenceInfo.status} - {absenceInfo.absences} faltas)
+                      </span>
+                    )}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onRemoveMember(member.id)}
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </Card>
-              ))
-            )}
+              );
+            })}
           </div>
         </div>
       </DialogContent>
