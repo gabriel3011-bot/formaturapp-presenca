@@ -1,0 +1,77 @@
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Calendar, Users, CheckCircle2, XCircle } from "lucide-react";
+import { Event } from "@/pages/Index";
+
+interface EventCardProps {
+  event: Event;
+  stats: { total: number; present: number; absent: number };
+  onClick: () => void;
+}
+
+export const EventCard = ({ event, stats, onClick }: EventCardProps) => {
+  const attendanceRate = stats.total > 0 ? (stats.present / stats.total) * 100 : 0;
+  const isPast = new Date(event.date) < new Date();
+
+  return (
+    <Card
+      className="p-6 cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1 bg-gradient-to-br from-card to-card/50 border-border/50"
+      onClick={onClick}
+    >
+      <div className="space-y-4">
+        <div className="flex items-start justify-between">
+          <h3 className="font-semibold text-lg text-foreground line-clamp-2">
+            {event.title}
+          </h3>
+          {isPast && (
+            <Badge variant="secondary" className="shrink-0 ml-2">
+              Passado
+            </Badge>
+          )}
+        </div>
+
+        {event.description && (
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {event.description}
+          </p>
+        )}
+
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Calendar className="w-4 h-4" />
+          <span>{new Date(event.date + "T00:00:00").toLocaleDateString('pt-BR')}</span>
+        </div>
+
+        <div className="pt-4 border-t border-border/50">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-muted-foreground">Presença</span>
+            <span className="text-sm font-semibold text-foreground">
+              {attendanceRate.toFixed(0)}%
+            </span>
+          </div>
+
+          <div className="w-full bg-muted/50 rounded-full h-2 mb-3">
+            <div
+              className="bg-gradient-to-r from-primary to-secondary h-2 rounded-full transition-all duration-500"
+              style={{ width: `${attendanceRate}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{stats.present}</span>
+            </div>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Users className="w-4 h-4" />
+              <span>{stats.total}</span>
+            </div>
+            <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+              <XCircle className="w-4 h-4" />
+              <span>{stats.absent}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+};
