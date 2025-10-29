@@ -12,12 +12,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Calendar, Users, CheckCircle2, XCircle, Edit, Trash2 } from "lucide-react";
+import { Calendar, Users, CheckCircle2, XCircle, Edit, Trash2, MessageSquare } from "lucide-react";
 import { Event } from "@/pages/Index";
 
 interface EventCardProps {
   event: Event;
-  stats: { total: number; present: number; absent: number };
+  stats: { total: number; present: number; absent: number; justified: number };
   onClick: () => void;
   onEdit?: (e: React.MouseEvent) => void;
   onDelete?: (id: string) => void;
@@ -121,13 +121,17 @@ export const EventCard = ({ event, stats, onClick, onEdit, onDelete }: EventCard
               <CheckCircle2 className="w-4 h-4" />
               <span>{stats.present}</span>
             </div>
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Users className="w-4 h-4" />
-              <span>{stats.total}</span>
+            <div className="flex items-center gap-1 text-yellow-600 dark:text-yellow-400">
+              <MessageSquare className="w-4 h-4" />
+              <span>{stats.justified}</span>
             </div>
             <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
               <XCircle className="w-4 h-4" />
               <span>{stats.absent}</span>
+            </div>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Users className="w-4 h-4" />
+              <span>{stats.total}</span>
             </div>
           </div>
         </div>

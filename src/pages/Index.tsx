@@ -32,6 +32,7 @@ export interface Event {
   date: string; // ISO (YYYY-MM-DD)
   description: string | null;
   attendance: { [memberId: string]: boolean };
+  justifications?: { [memberId: string]: string };
 }
 
 const Index = () => {
@@ -93,6 +94,9 @@ const Index = () => {
       attendance: attendance
         .filter((a) => a.event_id === event.id)
         .reduce((acc, a) => ({ ...acc, [a.member_id]: a.is_present }), {} as { [key: string]: boolean }),
+      justifications: attendance
+        .filter((a) => a.event_id === event.id && a.justification)
+        .reduce((acc, a) => ({ ...acc, [a.member_id]: a.justification! }), {} as { [key: string]: string }),
     }));
   }, [dbEvents, attendance]);
 
@@ -172,7 +176,11 @@ const Index = () => {
   const getAttendanceStats = (event: Event) => {
     const total = members.length;
     const present = Object.values(event.attendance || {}).filter(Boolean).length;
-    return { total, present, absent: total - present };
+    const justified = members.filter(m => 
+      !event.attendance?.[m.id] && event.justifications?.[m.id]
+    ).length;
+    const absent = total - present - justified;
+    return { total, present, absent, justified };
   };
 
   if (authLoading || eventsLoading || membersLoading) {
@@ -338,11 +346,15 @@ const Index = () => {
                   <h3 className="font-semibold">Presenças:</h3>
                   {members.map(member => {
                     const isPresent = selectedEvent.attendance?.[member.id];
+                    const justification = selectedEvent.justifications?.[member.id];
+                    const status = isPresent ? "Presente" : (justification ? "Justificada" : "Ausente");
+                    const statusColor = isPresent ? "text-green-600" : (justification ? "text-yellow-600" : "text-red-600");
+                    
                     return (
                       <div key={member.id} className="flex items-center gap-2">
                         <span>{member.name}:</span>
-                        <span className={isPresent ? "text-green-600" : "text-red-600"}>
-                          {isPresent ? "Presente" : "Ausente"}
+                        <span className={statusColor}>
+                          {status}
                         </span>
                       </div>
                     );
