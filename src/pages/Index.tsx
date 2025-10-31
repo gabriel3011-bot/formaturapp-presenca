@@ -15,11 +15,14 @@ import { MemberManagement } from "@/components/MemberManagement";
 import { EditEventDialog } from "@/components/EditEventDialog";
 import { DateSelector } from "@/components/DateSelector";
 import { AttendanceMarker } from "@/components/AttendanceMarker";
+import { AttendanceSummaryPanel } from "@/components/AttendanceSummaryPanel";
+import { EventsSummaryPanel } from "@/components/EventsSummaryPanel";
 import { useEvents } from "@/hooks/useEvents";
 import { useMembers } from "@/hooks/useMembers";
 import { useAttendance } from "@/hooks/useAttendance";
 import { toast } from "sonner";
 import { eventSchema, memberSchema } from "@/lib/validations";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export interface Member {
   id: string;
@@ -87,18 +90,21 @@ const Index = () => {
   // Load attendance for the event on the selected date
   const { attendance, toggleAttendance } = useAttendance(eventForSelectedDate?.id || "");
 
+  // Load ALL attendance records for summary panels
+  const { attendance: allAttendance } = useAttendance("");
+
   // Merge DB events with attendance for live view
   const events: Event[] = useMemo(() => {
     return dbEvents.map((event) => ({
       ...event,
-      attendance: attendance
+      attendance: allAttendance
         .filter((a) => a.event_id === event.id)
         .reduce((acc, a) => ({ ...acc, [a.member_id]: a.is_present }), {} as { [key: string]: boolean }),
-      justifications: attendance
+      justifications: allAttendance
         .filter((a) => a.event_id === event.id && a.justification)
         .reduce((acc, a) => ({ ...acc, [a.member_id]: a.justification! }), {} as { [key: string]: string }),
     }));
-  }, [dbEvents, attendance]);
+  }, [dbEvents, allAttendance]);
 
   // Compute absences per member across all events
   const absencesByMember = useMemo(() => {
@@ -275,63 +281,87 @@ const Index = () => {
 
         {/* Content */}
         <div className="space-y-6">
-          {/* Date Selector and Attendance Marker */}
-          <Card className="p-6">
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-4">Gerenciar Frequência por Data</h2>
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                  <DateSelector 
-                    selectedDate={selectedDate} 
-                    onDateChange={setSelectedDate}
-                  />
-                  {eventForSelectedDate && (
-                    <div className="text-sm text-muted-foreground">
-                      Evento: <span className="font-semibold text-foreground">{eventForSelectedDate.title}</span>
-                    </div>
-                  )}
-                  {!eventForSelectedDate && (
-                    <div className="text-sm text-muted-foreground">
-                      Nenhum evento nesta data. Crie um evento para marcar presença.
-                    </div>
-                  )}
-                </div>
-              </div>
+          <Tabs defaultValue="attendance" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-grid">
+              <TabsTrigger value="attendance">Marcar Presença</TabsTrigger>
+              <TabsTrigger value="summary">Resumo Geral</TabsTrigger>
+              <TabsTrigger value="absences">Painel de Faltas</TabsTrigger>
+            </TabsList>
 
-              {eventForSelectedDate && (
-                <div className="space-y-3">
-                  <h3 className="font-semibold text-lg">Marcar Presença</h3>
-                  <div className="space-y-2">
-                    {members.map((member) => {
-                      const attendanceRecord = attendance.find(a => a.member_id === member.id);
-                      const isPresent = attendanceRecord?.is_present ?? null;
-                      const justification = attendanceRecord?.justification;
-
-                      return (
-                        <Card key={member.id} className="p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <span className="font-medium">{member.name}</span>
-                            <AttendanceMarker
-                              memberId={member.id}
-                              memberName={member.name}
-                              isPresent={isPresent}
-                              justification={justification}
-                              onToggle={(isPresent, justification) => 
-                                handleToggleAttendance(member.id, isPresent, justification)
-                              }
-                            />
-                          </div>
-                        </Card>
-                      );
-                    })}
+            {/* Tab 1: Marcar Presença */}
+            <TabsContent value="attendance" className="space-y-6">
+              <Card className="p-6">
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-4">Gerenciar Frequência por Data</h2>
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                      <DateSelector 
+                        selectedDate={selectedDate} 
+                        onDateChange={setSelectedDate}
+                      />
+                      {eventForSelectedDate && (
+                        <div className="text-sm text-muted-foreground">
+                          Evento: <span className="font-semibold text-foreground">{eventForSelectedDate.title}</span>
+                        </div>
+                      )}
+                      {!eventForSelectedDate && (
+                        <div className="text-sm text-muted-foreground">
+                          Nenhum evento nesta data. Crie um evento para marcar presença.
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </Card>
 
-          {/* View Event List */}
-          {selectedEvent ? (
+                  {eventForSelectedDate && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg">Marcar Presença</h3>
+                      <div className="space-y-2">
+                        {members.map((member) => {
+                          const attendanceRecord = attendance.find(a => a.member_id === member.id);
+                          const isPresent = attendanceRecord?.is_present ?? null;
+                          const justification = attendanceRecord?.justification;
+
+                          return (
+                            <Card key={member.id} className="p-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <span className="font-medium">{member.name}</span>
+                                <AttendanceMarker
+                                  memberId={member.id}
+                                  memberName={member.name}
+                                  isPresent={isPresent}
+                                  justification={justification}
+                                  onToggle={(isPresent, justification) => 
+                                    handleToggleAttendance(member.id, isPresent, justification)
+                                  }
+                                />
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </TabsContent>
+
+            {/* Tab 2: Resumo Geral de Reuniões */}
+            <TabsContent value="summary">
+              <EventsSummaryPanel events={events} totalMembers={members.length} />
+            </TabsContent>
+
+            {/* Tab 3: Painel de Faltas */}
+            <TabsContent value="absences">
+              <AttendanceSummaryPanel 
+                members={members} 
+                allAttendanceRecords={allAttendance}
+                totalEvents={events.length}
+              />
+            </TabsContent>
+          </Tabs>
+
+          {/* Event Details Modal */}
+          {selectedEvent && (
             <div className="animate-in fade-in duration-300">
               <Button variant="ghost" onClick={() => setSelectedEvent(null)} className="mb-4">
                 ← Voltar para lista de eventos
@@ -362,9 +392,11 @@ const Index = () => {
                 </div>
               </Card>
             </div>
-          ) : (
+          )}
+
+          {/* Stats Cards */}
+          {!selectedEvent && (
             <>
-              {/* Stats Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50 shadow-md">
                 <div className="flex items-center gap-3">
