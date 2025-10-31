@@ -61,6 +61,7 @@ export const useAttendance = (eventId: string) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["attendance", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["attendance", "all"] });
     },
   });
 

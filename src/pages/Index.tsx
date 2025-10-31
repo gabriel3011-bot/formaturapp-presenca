@@ -20,6 +20,7 @@ import { EventsSummaryPanel } from "@/components/EventsSummaryPanel";
 import { useEvents } from "@/hooks/useEvents";
 import { useMembers } from "@/hooks/useMembers";
 import { useAttendance } from "@/hooks/useAttendance";
+import { useAllAttendance } from "@/hooks/useAllAttendance";
 import { toast } from "sonner";
 import { eventSchema, memberSchema } from "@/lib/validations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -91,7 +92,7 @@ const Index = () => {
   const { attendance, toggleAttendance } = useAttendance(eventForSelectedDate?.id || "");
 
   // Load ALL attendance records for summary panels
-  const { attendance: allAttendance } = useAttendance("");
+  const { allAttendance } = useAllAttendance();
 
   // Merge DB events with attendance for live view
   const events: Event[] = useMemo(() => {
